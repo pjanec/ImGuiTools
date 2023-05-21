@@ -166,6 +166,8 @@ namespace ImGuiTools
 
 			//dumper.Dump( "", typeof(MyClass), myClass, () => ImGui.Text("MyClass") );
 			dumper.Dump( "", typeof(MyClass), myClass, null );
+			//dumper.Dump( "", typeof(MyClass), null, null );
+			//dumper.Dump( "", typeof(MyClass), null, () => ImGui.Text("MyClass") );
 
 
 

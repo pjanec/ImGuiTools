@@ -47,7 +47,7 @@ namespace ImGuiTools
 		/// <summary>
 		///   How to list the fields of given object type.
 		/// </summary>
-		public ILister Lister = new ReflectionLister();
+		public IFieldLister Lister = new FieldLister();
 
 		/// <summary>
 		///   Called after the key has been rendered. You can check for hover, clicks etc. here.
@@ -239,11 +239,14 @@ namespace ImGuiTools
 		{
 			ImGui.Indent();
 			
-			DrawKey( path, type, value, key, keyColor );
+			if( key != null )
+			{
+				DrawKey( path, type, value, key, keyColor );
 			
-			ImGui.SameLine();
+				ImGui.SameLine();
+			}
 			
-			DrawValue( path, type, value, withEqualSign, quoted, valueColor );
+			DrawValue( path, type, value, key != null, quoted, valueColor );
 			
 			ImGui.Unindent();
 		}
@@ -286,7 +289,7 @@ namespace ImGuiTools
 
 		private void DrawClassFields( string path, Type type, object value )
 		{
-			foreach (var (fieldInfo, fieldValue) in Lister.GetFields( type, value ))
+			foreach (var (fieldInfo, fieldValue) in Lister.GetFields( value ))
 			{
 				var fieldType = fieldInfo.FieldType;
 

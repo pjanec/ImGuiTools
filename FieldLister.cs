@@ -7,23 +7,35 @@ using System.Threading.Tasks;
 
 namespace ImGuiTools
 {
-	public interface ILister
+	public interface IFieldLister
 	{
-		IEnumerable<(FieldInfo, object)> GetFields( System.Type type, object value );
+		IEnumerable<(FieldInfo, object)> GetFields( object value );
 		object GetArrayItem( object value, int index );
 		int GetArrayLength( object value );
 	}
 
 		
-	public class ReflectionLister : ILister
+	public class FieldLister : IFieldLister
 	{
-		public IEnumerable<(FieldInfo, object)> GetFields( System.Type type, object value )
+		bool _includeNonPublic;
+
+		public FieldLister( bool includeNonPublic=false )
 		{
-			var fields = type.GetFields(
-				System.Reflection.BindingFlags.Instance |
-				System.Reflection.BindingFlags.Public |
-				System.Reflection.BindingFlags.NonPublic
-				);
+			_includeNonPublic = includeNonPublic;
+		}
+
+		public IEnumerable<(FieldInfo, object)> GetFields( object value )
+		{
+			if( value == null )
+				yield break;
+
+			var fieldFlags = BindingFlags.Instance | BindingFlags.Public;
+			if( _includeNonPublic )
+				fieldFlags |= BindingFlags.NonPublic;
+
+			var	type = value.GetType();
+			var fields = type.GetFields( fieldFlags );
+
 			foreach (var fieldInfo in fields)
 			{
 				var fieldValue = fieldInfo.GetValue( value );

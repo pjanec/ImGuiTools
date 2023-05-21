@@ -59,6 +59,11 @@ namespace ImGuiTools
 		/// </summary>
 		public RenderedDeleg OnValueRendered = null; 
 
+		/// <summary>
+		///   Should all containers be rendered as expanded by default?
+		/// </summary>
+		public bool DefaultExpanded = false;
+
 
 		static Vector4 ByteToFloat( Vector4 b ) => new Vector4( (float)b.X / 255.0f, (float)b.Y / 255.0f, (float)b.Z / 255.0f, (float)b.W / 255.0f );
 		
@@ -251,7 +256,7 @@ namespace ImGuiTools
 				if( key != null )
 				{
 					ImGui.PushStyleColor(ImGuiCol.Text, Colors.Triangle);
-					bool opened = ImGui.TreeNodeEx( $"##{path}", ImGuiTreeNodeFlags.DefaultOpen );
+					bool opened = ImGui.TreeNodeEx( $"##{path}", DefaultExpanded ? ImGuiTreeNodeFlags.DefaultOpen : 0 );
 					ImGui.PopStyleColor();
 				
 					if( key != null )
@@ -302,39 +307,51 @@ namespace ImGuiTools
 			var elemType = type.GetElementType();
 			if (value != null)
 			{
-				ImGui.PushStyleColor(ImGuiCol.Text, Colors.Triangle);
-				bool opened = ImGui.TreeNodeEx( $"##{path}", ImGuiTreeNodeFlags.DefaultOpen );
-				ImGui.PopStyleColor();
-				
+				int length = Lister.GetArrayLength(value);
+
 				if( key != null )
 				{
-					ImGui.SameLine();
-					DrawKey( path, type, value, key, Colors.ContainerField );
-				}
-
-				int length = Lister.GetArrayLength(value);
+					ImGui.PushStyleColor(ImGuiCol.Text, Colors.Triangle);
+					bool opened = ImGui.TreeNodeEx( $"##{path}", DefaultExpanded ? ImGuiTreeNodeFlags.DefaultOpen : 0 );
+					ImGui.PopStyleColor();
 				
-				ImGui.SameLine();
-				ImGui.TextColored(Colors.ArrayLength, $"({length})");
-				
-				if( opened)
-				{
-					for (int i = 0; i < length; i++)
+					if( key != null )
 					{
-						Action childKey = () =>
-						{
-							ImGui.TextColored(Colors.Index, $"[{i}]");
-						};
-						var elemValue = Lister.GetArrayItem( value, i );
-						Dump( path, elemType, elemValue, childKey);
+						ImGui.SameLine();
+						DrawKey( path, type, value, key, Colors.ContainerField );
 					}
 
-					ImGui.TreePop();
+					ImGui.SameLine();
+					ImGui.TextColored(Colors.ArrayLength, $"({length})");
+				
+					if( opened)
+					{
+						DrawArrayElements( path, value, elemType, length );
+
+						ImGui.TreePop();
+					}
+				}
+				else
+				{
+					DrawArrayElements( path, value, elemType, length );
 				}
 			}
 			else
 			{
 				DrawKeyValue( path, type, value, key, false, false, Colors.ContainerField, Vector4.Zero );
+			}
+		}
+
+		private void DrawArrayElements( string path, object value, Type elemType, int length )
+		{
+			for (int i = 0; i < length; i++)
+			{
+				Action childKey = () =>
+				{
+					ImGui.TextColored( Colors.Index, $"[{i}]" );
+				};
+				var elemValue = Lister.GetArrayItem( value, i );
+				Dump( path, elemType, elemValue, childKey );
 			}
 		}
 

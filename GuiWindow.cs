@@ -96,6 +96,8 @@ namespace ImGuiTools
 		{
 			dumper = new ImGuiTreeDump(); // captured
 
+			dumper.DefaultExpanded = true;
+
 			dumper.DumpersByType = new Dictionary<System.Type, ImGuiTreeDump.DumpDeleg>()
 			{
 				{ typeof(DateTime), (path, type, value, key) => {
@@ -127,7 +129,9 @@ namespace ImGuiTools
 				if( ImGui.IsItemHovered() )
 				{
 					ImGui.BeginTooltip();
-					ImGui.Text($"{path} [{type.Name}]");
+					ImGui.TextColored(dumper.Colors.String, $"{path}");
+					ImGui.SameLine();
+					ImGui.TextColored(dumper.Colors.TypeName, $"[{type.Name}]");
 					ImGui.EndTooltip();
 				}
 			};
@@ -160,8 +164,8 @@ namespace ImGuiTools
 			
 			dumper.DrawStyleSetting();
 
-			dumper.Dump( "", typeof(MyClass), myClass, () => ImGui.Text("MyClass") );
-			//dumper.Dump( "", typeof(MyClass), myClass, null );
+			//dumper.Dump( "", typeof(MyClass), myClass, () => ImGui.Text("MyClass") );
+			dumper.Dump( "", typeof(MyClass), myClass, null );
 
 
 

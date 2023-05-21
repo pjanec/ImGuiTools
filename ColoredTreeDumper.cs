@@ -1,9 +1,11 @@
-﻿
+﻿using System;
+using System.Collections.Generic;
 using ImGuiNET;
 using Newtonsoft.Json.Linq;
 using System.IO;
 using System.Numerics;
 using System.Reflection;
+using SixLabors.ImageSharp;
 
 namespace ImGuiTools
 {
@@ -11,10 +13,8 @@ namespace ImGuiTools
 	/// <summary>
 	/// Renders the content of object of givent type & value as a tree with colored parts (field names, numbers, strings...)
 	/// Allows for custom renderer for given type or for fields on specific path within the object (like "field1.subfield2.subsubfield3").
-	/// 
-	/// Warning: Supports arrays ony (not generic lists!)
 	/// </summary>
-	public class ImGuiTreeDump
+	public class ColoredTreeDumper
 	{
 		/// <summary>
 		///   Delegate rendering the field of given type & value.
@@ -30,7 +30,7 @@ namespace ImGuiTools
 		/// <param name="type">object value type</param>
 		/// <param name="value">reference to the object</param>
 		/// <param name="key">what to render of the left; usually the field name; null = nothing</param>
-		public delegate void DumpDeleg( string path, System.Type type, object value, Action key );
+		public delegate void DumpDeleg( string path, System.Type type, Action key, object value );
 
 		public delegate void RenderedDeleg( string path, System.Type type, object value );
 
@@ -86,91 +86,85 @@ namespace ImGuiTools
 
 		public ColorSpec Colors = new ColorSpec();
 
-		public ImGuiTreeDump()
+		public ColoredTreeDumper()
 		{
 		}
 
 		/// <summary>
-		/// 
+		///    Draws the object as a colored tree.
 		/// </summary>
-		/// <param name="path"></param>
-		/// <param name="type"></param>
-		/// <param name="value"></param>
+		/// <param name="path">field hierarchy path (like "field1.subfield2.subsubfield3"); comma separated levels; should be empty if at root level</param>
+		/// <param name="type">type of the object to draw</param>
+		/// <param name="value">reference to the object to draw</param>
 		/// <param name="key">action to render the part on the left (usualy the name of the field); null = nothing is rendered prior to the value</param>
-		public void Dump( string path, System.Type type, object value, Action key )
+		public void Draw( string path, System.Type type, Action key, object value )
 		{
+			ImGui.PushID(path);	// isolate popups etc
+
 			if( DumpersByPath.TryGetValue( path, out var dumper ) )
 			{
-				dumper( path, type, value, key );
-				return;
+				dumper( path, type, key, value );
 			}
-			
+			else
 			if( DumpersByType.TryGetValue( type, out dumper ) )
 			{
-				dumper( path, type, value, key );
-				return;
+				dumper( path, type, key, value );
 			}
-
-			if( type.IsPrimitive )
-			{
-				DumpPrimitive( path, type, value, key );
-				return;
-			}
+			else
 			if ( type == typeof(System.String) )
 			{
-				DumpString( path, type, value, key );
-				return;
+				DumpString( path, type, key, value );
 			}
-
+			else
+			if ( type == typeof(System.Boolean) )
+			{
+				DumpBoolean( path, type, key, value );
+			}
+			else
 			if ( type.IsEnum )
 			{
-				DumpEnum( path, type, value, key );
-				return;
+				DumpEnum( path, type, key, value );
 			}
-
+			else
 			if ( type == typeof(System.DateTime) )
 			{
-				DumpPrimitive( path, type, value, key );
-				return;
+				DumpPrimitive( path, type, key, value );
 			}
-
+			else
 			if ( type == typeof(System.TimeSpan) )
 			{
-				DumpPrimitive( path, type, value, key );
-				return;
+				DumpPrimitive( path, type, key, value );
 			}
-
+			else
 			if ( type == typeof(System.Guid) )
 			{
-				DumpPrimitive( path, type, value, key );
-				return;
+				DumpPrimitive( path, type, key, value );
 			}
-
+			else
+			if( type.IsPrimitive )
+			{
+				DumpPrimitive( path, type, key, value );
+			}
+			else
 			if ( type.IsArray )
 			{
-				DumpArray( path, type, value, key );
-				return;
+				DumpArray( path, type, key, value );
 			}
-
-			//if( ReflectionUtility.IsList( type ) )
-			//{
-			//	DumpList( type, value, indent );
-			//	return;
-			//}
-
+			else
 			if( type.IsClass )
 			{
-				DumpClass( path, type, value, key );
-				return;
+				DumpClass( path, type, key, value );
 			}
-
+			else
 			if( type.IsValueType )
 			{
-				DumpClass( path, type, value, key );
+				DumpClass( path, type, key, value );
 			}
+
+			ImGui.PopID();
 		}
 
-		public void DrawKey( string path, System.Type type, object value, Action key, Vector4 color )
+		public void DrawKey( string path, System.Type type, Action key, object value, Vector4 color )
 		{
 			ImGui.PushStyleColor(ImGuiCol.Text, color);
 			key();
@@ -189,7 +183,14 @@ namespace ImGuiTools
 			
 			ImGui.BeginGroup();
 
-			DrawValueAsText( value, quoted );
+			if( value is Action action )
+			{
+				action();
+			}
+			else
+			{
+				DrawValueAsText( value, quoted );
+			}
 
 			ImGui.EndGroup();
 			
@@ -198,7 +199,7 @@ namespace ImGuiTools
 
 		public void DrawValue( string path, System.Type type, object value, bool withEqualSign, bool quoted, Vector4 color )
 		{
-			if( color == Vector4.Zero )
+			if( color == Vector4.Zero )	// no color -> use default
 			{
 				DrawValue( path, type, value, withEqualSign, quoted );
 			}
@@ -212,12 +213,6 @@ namespace ImGuiTools
 
 		public void DrawValueAsText( object value, bool quoted )
 		{
-			if( value is Action action )
-			{
-				action();
-				return;
-			}
-
 			if( value == null )
 			{
 				ImGui.TextColored(Colors.Constant, "null" );
@@ -235,13 +230,13 @@ namespace ImGuiTools
 			}
 		}
 
-		public void DrawKeyValue( string path, System.Type type, object value, Action key, bool withEqualSign, bool quoted, Vector4 keyColor, Vector4 valueColor )
+		public void DrawKeyValue( string path, System.Type type, Action key, object value, bool withEqualSign, bool quoted, Vector4 keyColor, Vector4 valueColor )
 		{
 			ImGui.Indent();
 			
 			if( key != null )
 			{
-				DrawKey( path, type, value, key, keyColor );
+				DrawKey( path, type, key, value, keyColor );
 			
 				ImGui.SameLine();
 			}
@@ -252,7 +247,7 @@ namespace ImGuiTools
 		}
 
 
-		public void DumpClass( string path, Type type, object value, Action key )
+		public void DumpClass( string path, Type type, Action key, object value )
 		{
 			if (value != null)
 			{
@@ -266,7 +261,7 @@ namespace ImGuiTools
 					{
 						ImGui.SameLine();
 					
-						DrawKey(path, type, value, key, Colors.ContainerField);
+						DrawKey(path, type, key, value, Colors.ContainerField);
 					}
 
 					if( opened )
@@ -283,11 +278,11 @@ namespace ImGuiTools
 			}
 			else
 			{
-				DrawKeyValue( path, type, value, key, true, false, Colors.ContainerField, Vector4.Zero );
+				DrawKeyValue( path, type, key, value, true, false, Colors.ContainerField, Vector4.Zero );
 			}
 		}
 
-		private void DrawClassFields( string path, Type type, object value )
+		public void DrawClassFields( string path, Type type, object value )
 		{
 			foreach (var (fieldInfo, fieldValue) in Lister.GetFields( type, value ))
 			{
@@ -301,11 +296,37 @@ namespace ImGuiTools
 				{
 					ImGui.Text( $"{fieldInfo.Name}" );
 				};
-				Dump( childPath, fieldType, fieldValue, childKey );
+				Draw( childPath, fieldType, childKey, fieldValue );
 			}
 		}
 
-		public void DumpArray( string path, Type type, object value, Action key )
+		// showing custom formatted value inline, but expandable to show all fields
+		public void DrawClassKeyValue( string path, Type type, Action key, object value, object inlineValue )
+		{
+			ImGui.PushStyleColor(ImGuiCol.Text, Colors.Triangle);
+			bool opened = ImGui.TreeNodeEx( $"##{path}" ); // by default closed because we are drawing custom format on same line
+			ImGui.PopStyleColor();
+				
+			if( key != null )
+			{
+				ImGui.SameLine();
+					
+				DrawKey(path, type, key, value, Colors.ContainerField);
+			}
+
+			ImGui.SameLine();
+
+			DrawValue( path, type, inlineValue, true, false, Vector4.Zero );
+
+			if( opened )
+			{
+				DrawClassFields( path, type, value );
+
+				ImGui.TreePop();
+			}
+		}
+
+		public void DumpArray( string path, Type type, Action key, object value )
 		{
 			var elemType = type.GetElementType();
 			if (value != null)
@@ -321,7 +342,7 @@ namespace ImGuiTools
 					if( key != null )
 					{
 						ImGui.SameLine();
-						DrawKey( path, type, value, key, Colors.ContainerField );
+						DrawKey( path, type, key, value, Colors.ContainerField );
 					}
 
 					ImGui.SameLine();
@@ -341,7 +362,7 @@ namespace ImGuiTools
 			}
 			else
 			{
-				DrawKeyValue( path, type, value, key, false, false, Colors.ContainerField, Vector4.Zero );
+				DrawKeyValue( path, type, key, value, false, false, Colors.ContainerField, Vector4.Zero );
 			}
 		}
 
@@ -354,23 +375,28 @@ namespace ImGuiTools
 					ImGui.TextColored( Colors.Index, $"[{i}]" );
 				};
 				var elemValue = Lister.GetElementAtIndex( value, i );
-				Dump( path+$"[{i}]", elemType, elemValue, childKey );
+				Draw( path+$"[{i}]", elemType, childKey, elemValue );
 			}
 		}
 
-		private void DumpEnum( string path, Type type, object value, Action key )
+		private void DumpEnum( string path, Type type, Action key, object value )
 		{
-			DrawKeyValue( path, type, value, key, true, false, Colors.SimpleField, Colors.EnumItem );
+			DrawKeyValue( path, type, key, value, true, false, Colors.SimpleField, Colors.EnumItem );
 		}
 
-		private void DumpString( string path, Type type, object value, Action key )
+		private void DumpString( string path, Type type, Action key, object value )
 		{
-			DrawKeyValue( path, type, value, key, true, true, Colors.SimpleField, Colors.String );
+			DrawKeyValue( path, type, key, value, true, true, Colors.SimpleField, Colors.String );
 		}
 
-		private void DumpPrimitive( string path, Type type, object value, Action key )
+		private void DumpBoolean( string path, Type type, Action key, object value )
 		{
-			DrawKeyValue( path, type, value, key, true, false, Colors.SimpleField, Colors.Number );
+			DrawKeyValue( path, type, key, value, true, false, Colors.SimpleField, Colors.Constant );
+		}
+
+		private void DumpPrimitive( string path, Type type, Action key, object value )
+		{
+			DrawKeyValue( path, type, key, value, true, false, Colors.SimpleField, Colors.Number );
 		}
 
 		public void DrawStyleSetting()

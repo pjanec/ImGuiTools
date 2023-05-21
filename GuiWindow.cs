@@ -90,37 +90,37 @@ namespace ImGuiTools
 			public Action<int> SomeIntAction;
 		}
 
-		ImGuiTreeDump dumper;
+		ColoredTreeDumper dumper;
 
 		void Init()
 		{
-			dumper = new ImGuiTreeDump(); // captured
+			dumper = new ColoredTreeDumper(); // captured
 
 			dumper.DefaultExpanded = true;
 
-			dumper.DumpersByType = new Dictionary<System.Type, ImGuiTreeDump.DumpDeleg>()
+			dumper.DumpersByType = new Dictionary<System.Type, ColoredTreeDumper.DumpDeleg>()
 			{
-				{ typeof(DateTime), (path, type, value, key) => {
+				{ typeof(DateTime), (path, type, key, value) => {
 
 					Action valueRenderer = () => {
 						ImGui.TextColored(dumper.Colors.TypeName, $"[{type.Name}]");
 						ImGui.SameLine();
 						ImGui.TextColored(dumper.Colors.Number,$"CUSTOM {value:HH:mm:ss.fff}");
 					};
-					dumper.DrawKeyValue(path, type, valueRenderer, key, true, false, dumper.Colors.SimpleField, Vector4.Zero);
+					dumper.DrawKeyValue(path, type, key, valueRenderer, true, false, dumper.Colors.SimpleField, Vector4.Zero);
 				} },
 			};
 			
-			dumper.DumpersByPath = new Dictionary<string, ImGuiTreeDump.DumpDeleg>()
+			dumper.DumpersByPath = new Dictionary<string, ColoredTreeDumper.DumpDeleg>()
 			{
-				{ "StructArray.IntField", (path, type, value, key) =>	{
+				{ "StructArray.IntField", (path, type, key, value) =>	{
 
 					Action valueRenderer = () => {
 						ImGui.TextColored(dumper.Colors.TypeName, $"[{type.Name}]");
 						ImGui.SameLine();
 						ImGui.TextColored(dumper.Colors.Number,$"CUSTOM {value}");
 					};
-					dumper.DrawKeyValue(path, type, valueRenderer, key, true, false, dumper.Colors.SimpleField, Vector4.Zero);
+					dumper.DrawKeyValue(path, type, key, valueRenderer, true, false, dumper.Colors.SimpleField, Vector4.Zero);
 				}},
 			};
 
@@ -164,10 +164,10 @@ namespace ImGuiTools
 			
 			dumper.DrawStyleSetting();
 
-			//dumper.Dump( "", typeof(MyClass), myClass, () => ImGui.Text("MyClass") );
-			dumper.Dump( "", typeof(MyClass), myClass, null );
-			//dumper.Dump( "", typeof(MyClass), null, null );
-			//dumper.Dump( "", typeof(MyClass), null, () => ImGui.Text("MyClass") );
+			//dumper.Draw( "", typeof(MyClass), () => ImGui.Text("MyClass"), myClass );
+			dumper.Draw( "", typeof(MyClass), null, myClass );
+			//dumper.Draw( "", typeof(MyClass), null, null );
+			//dumper.Draw( "", typeof(MyClass), () => ImGui.Text("MyClass"), null );
 
 
 

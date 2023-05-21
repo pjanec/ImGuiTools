@@ -351,7 +351,7 @@ namespace ImGuiTools
 					ImGui.TextColored( Colors.Index, $"[{i}]" );
 				};
 				var elemValue = Lister.GetArrayItem( value, i );
-				Dump( path, elemType, elemValue, childKey );
+				Dump( path+$"[{i}]", elemType, elemValue, childKey );
 			}
 		}
 

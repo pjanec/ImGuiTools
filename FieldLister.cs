@@ -9,22 +9,44 @@ namespace ImGuiTools
 {
 	public interface IFieldLister
 	{
-		IEnumerable<(FieldInfo, object)> GetFields( object value );
-		object GetArrayItem( object value, int index );
-		int GetArrayLength( object value );
+		/// <summary>
+		///   Enumerates all fields and their values for the given object.
+		/// </summary>
+		/// <param name="type">type of the object</param>
+		/// <param name="value">reference to the object instance</param>
+		/// <returns>collection of (FieldInfo, field value)</returns>
+		IEnumerable<(FieldInfo, object)> GetFields( System.Type type, object value );
+
+		/// <summary>
+		///   For indexable collection types, returns the value at the given index.
+		/// </summary>
+		/// <param name="value">indexable object instance reference</param>
+		/// <param name="index">zero based index</param>
+		/// <returns></returns>
+		object GetElementAtIndex( object value, int index );
+		
+		/// <summary>
+		///   For collection types, returns the number of elements in the collection.
+		/// </summary>
+		/// <param name="value">collection object reference</param>
+		/// <returns>number of elements</returns>
+		int GetElementCount( object value );
 	}
 
 		
-	public class FieldLister : IFieldLister
+	/// <summary>
+	///   Reflection-based field lister
+	/// </summary>
+	public class ReflectionFieldLister : IFieldLister
 	{
 		bool _includeNonPublic;
 
-		public FieldLister( bool includeNonPublic=false )
+		public ReflectionFieldLister( bool includeNonPublic=false )
 		{
 			_includeNonPublic = includeNonPublic;
 		}
 
-		public IEnumerable<(FieldInfo, object)> GetFields( object value )
+		public IEnumerable<(FieldInfo, object)> GetFields( System.Type type, object value )
 		{
 			if( value == null )
 				yield break;
@@ -33,7 +55,7 @@ namespace ImGuiTools
 			if( _includeNonPublic )
 				fieldFlags |= BindingFlags.NonPublic;
 
-			var	type = value.GetType();
+			//var	type = value.GetType();
 			var fields = type.GetFields( fieldFlags );
 
 			foreach (var fieldInfo in fields)
@@ -43,15 +65,19 @@ namespace ImGuiTools
 			}
 		}
 
-		public object GetArrayItem( object value, int index )
+		public object GetElementAtIndex( object value, int index )
 		{
+		    // currently we support just Array
+		    // TODO: extend to generic collections/lists
 			if( value is not Array arr )
 				throw new ArgumentException( "value is not an array" );
 			return arr.GetValue( index );
 		}
 
-		public int GetArrayLength( object value )
+		public int GetElementCount( object value )
 		{
+		    // currently we support just Array
+		    // TODO: extend to generic collections/lists
 			if( value is not Array arr )
 				throw new ArgumentException( "value is not an array" );
 			return arr.Length;

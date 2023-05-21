@@ -1,26 +1,69 @@
 ﻿
 using ImGuiNET;
 using Newtonsoft.Json.Linq;
+using System.IO;
 using System.Numerics;
 using System.Reflection;
 
 namespace ImGuiTools
 {
-	// Supports arrays (not generic lists!)
+	// 
+	/// <summary>
+	/// Renders the content of object of givent type & value as a tree with colored parts (field names, numbers, strings...)
+	/// Allows for custom renderer for given type or for fields on specific path within the object (like "field1.subfield2.subsubfield3").
+	/// 
+	/// Warning: Supports arrays ony (not generic lists!)
+	/// </summary>
 	public class ImGuiTreeDump
 	{
+		/// <summary>
+		///   Delegate rendering the field of given type & value.
+		/// </summary>
+		/// <remarks>
+		///   The delegate is expected to render the field value using ImGui.
+		///   If it is a container (array, list, dictionary, etc.), it should render expandable TreeNode as well as the the contained items.
+		///   If it is not a container, it should render the value as a single line, but indented to left align with the TreeNode fields.
+		///   The 'key' delegate is provided to render the part on the left (usualy the name of the field); you can apply imgui style
+		///   if you want it to have certain color.
+		/// </remarks>
+		/// <param name="path">where within the object's internal hierarchy the field is. (like "field1.subfield2.subsubfield3")</param>
+		/// <param name="type">object value type</param>
+		/// <param name="value">reference to the object</param>
+		/// <param name="key">what to render of the left; usually the field name; null = nothing</param>
 		public delegate void DumpDeleg( string path, System.Type type, object value, Action key );
-		public delegate IEnumerable<(FieldInfo, object)> FieldLister( System.Type type, object value );
 
+		public delegate void RenderedDeleg( string path, System.Type type, object value );
+
+		/// <summary>
+		///   Custom renderer for given field type
+		/// </summary>
 		public Dictionary<System.Type, DumpDeleg> DumpersByType = new Dictionary<Type, DumpDeleg>();
+		
+		/// <summary>
+		///   Custom renderer for fields on specific path within the object (like "field1.subfield2.subsubfield3").
+		/// </summary>
 		public Dictionary<string, DumpDeleg> DumpersByPath = new Dictionary<string, DumpDeleg>();
+		
+		/// <summary>
+		///   How to list the fields of given object type.
+		/// </summary>
 		public ILister Lister = new ReflectionLister();
+
+		/// <summary>
+		///   Called after the key has been rendered. You can check for hover, clicks etc. here.
+		/// </summary>
+		public RenderedDeleg OnKeyRendered = null; 
+
+		/// <summary>
+		///   Called after the value has been rendered. You can check for hover, clicks etc. here.
+		/// </summary>
+		public RenderedDeleg OnValueRendered = null; 
+
 
 		static Vector4 ByteToFloat( Vector4 b ) => new Vector4( (float)b.X / 255.0f, (float)b.Y / 255.0f, (float)b.Z / 255.0f, (float)b.W / 255.0f );
 		
 		public class ColorSpec
 		{
-			public Vector4 Default = ByteToFloat( new Vector4(250,250,250,255));
 			public Vector4 Number = ByteToFloat( new Vector4(210,238,38,255));
 			public Vector4 Index = ByteToFloat( new Vector4(175,175,175,255));
 			public Vector4 TypeName = ByteToFloat( new Vector4(175,175,175,255));
@@ -40,20 +83,6 @@ namespace ImGuiTools
 
 		public ImGuiTreeDump()
 		{
-		}
-
-		public static IEnumerable<(FieldInfo, object)> ReflectionFieldLister( System.Type type, object value )
-		{
-			var fields = type.GetFields(
-				System.Reflection.BindingFlags.Instance |
-				System.Reflection.BindingFlags.Public |
-				System.Reflection.BindingFlags.NonPublic
-				);
-			foreach (var fieldInfo in fields)
-			{
-				var fieldValue = fieldInfo.GetValue( value );
-				yield return (fieldInfo, fieldValue);
-			}
 		}
 
 		/// <summary>
@@ -136,6 +165,85 @@ namespace ImGuiTools
 			}
 		}
 
+		public void DrawKey( string path, System.Type type, object value, Action key, Vector4 color )
+		{
+			ImGui.PushStyleColor(ImGuiCol.Text, color);
+			key();
+			ImGui.PopStyleColor();
+
+			OnKeyRendered?.Invoke( path, type, value );
+		}
+
+		public void DrawValue( string path, System.Type type, object value, bool withEqualSign, bool quoted )
+		{
+			if( withEqualSign )
+			{
+				ImGui.TextColored(Colors.EqualSign, "=");
+				ImGui.SameLine();
+			}
+			
+			ImGui.BeginGroup();
+
+			DrawValueAsText( value, quoted );
+
+			ImGui.EndGroup();
+			
+			OnValueRendered?.Invoke( path, type, value );
+		}
+
+		public void DrawValue( string path, System.Type type, object value, bool withEqualSign, bool quoted, Vector4 color )
+		{
+			if( color == Vector4.Zero )
+			{
+				DrawValue( path, type, value, withEqualSign, quoted );
+			}
+			else
+			{
+				ImGui.PushStyleColor(ImGuiCol.Text, color);
+				DrawValue( path, type, value, withEqualSign, quoted );
+				ImGui.PopStyleColor();
+			}
+		}
+
+		public void DrawValueAsText( object value, bool quoted )
+		{
+			if( value is Action action )
+			{
+				action();
+				return;
+			}
+
+			if( value == null )
+			{
+				ImGui.TextColored(Colors.Constant, "null" );
+			}
+			else
+			{
+				if( quoted )
+				{
+					ImGui.Text( $"\"{value}\"" );
+				}
+				else
+				{
+					ImGui.Text(value.ToString() );
+				}
+			}
+		}
+
+		public void DrawKeyValue( string path, System.Type type, object value, Action key, bool withEqualSign, bool quoted, Vector4 keyColor, Vector4 valueColor )
+		{
+			ImGui.Indent();
+			
+			DrawKey( path, type, value, key, keyColor );
+			
+			ImGui.SameLine();
+			
+			DrawValue( path, type, value, withEqualSign, quoted, valueColor );
+			
+			ImGui.Unindent();
+		}
+
+
 		public void DumpClass( string path, Type type, object value, Action key )
 		{
 			if (value != null)
@@ -150,13 +258,8 @@ namespace ImGuiTools
 					{
 						ImGui.SameLine();
 					
-						ImGui.PushStyleColor(ImGuiCol.Text, Colors.ContainerField);
-						key();
-						ImGui.PopStyleColor();
+						DrawKey(path, type, value, key, Colors.ContainerField);
 					}
-
-					//ImGui.SameLine();
-					//ImGui.Text($"[Class {type.Name}]" );
 
 					if( opened )
 					{
@@ -172,22 +275,7 @@ namespace ImGuiTools
 			}
 			else
 			{
-				ImGui.Indent();
-
-				if( key != null )
-				{
-					ImGui.PushStyleColor(ImGuiCol.Text, Colors.ContainerField);
-					key();
-					ImGui.PopStyleColor();
-					ImGui.SameLine();
-				}
-
-				//ImGui.Text( $"[Class {type.Name}] = null" );
-				ImGui.TextColored(Colors.EqualSign, "=");
-				ImGui.SameLine();
-				ImGui.TextColored(Colors.Constant, "null" );
-
-				ImGui.Unindent();
+				DrawKeyValue( path, type, value, key, true, false, Colors.ContainerField, Vector4.Zero );
 			}
 		}
 
@@ -212,8 +300,7 @@ namespace ImGuiTools
 		public void DumpArray( string path, Type type, object value, Action key )
 		{
 			var elemType = type.GetElementType();
-			var arr = value as Array;
-			if (arr != null)
+			if (value != null)
 			{
 				ImGui.PushStyleColor(ImGuiCol.Text, Colors.Triangle);
 				bool opened = ImGui.TreeNodeEx( $"##{path}", ImGuiTreeNodeFlags.DefaultOpen );
@@ -222,9 +309,7 @@ namespace ImGuiTools
 				if( key != null )
 				{
 					ImGui.SameLine();
-					ImGui.PushStyleColor(ImGuiCol.Text, Colors.ContainerField);
-					key();
-					ImGui.PopStyleColor();
+					DrawKey( path, type, value, key, Colors.ContainerField );
 				}
 
 				int length = Lister.GetArrayLength(value);
@@ -249,97 +334,27 @@ namespace ImGuiTools
 			}
 			else
 			{
-				ImGui.Indent();
-
-				if( key != null )
-				{
-					ImGui.PushStyleColor(ImGuiCol.Text, Colors.ContainerField);
-					key();
-					ImGui.PopStyleColor();
-					ImGui.SameLine();
-				}
-				
-
-				ImGui.TextColored(Colors.EqualSign, "=");
-				ImGui.SameLine();
-				ImGui.TextColored(Colors.Constant, "null" );
-
-				ImGui.Unindent();
+				DrawKeyValue( path, type, value, key, false, false, Colors.ContainerField, Vector4.Zero );
 			}
 		}
 
 		private void DumpEnum( string path, Type type, object value, Action key )
 		{
-			ImGui.Indent();
-
-			if( key != null )
-			{
-				ImGui.PushStyleColor(ImGuiCol.Text, Colors.SimpleField);
-				key();
-				ImGui.PopStyleColor();
-
-				ImGui.SameLine();
-			}
-
-			ImGui.TextColored(Colors.EqualSign, "=");
-			ImGui.SameLine();
-			ImGui.TextColored(Colors.EnumItem, $"{value}" );
-
-			ImGui.Unindent();
+			DrawKeyValue( path, type, value, key, true, false, Colors.SimpleField, Colors.EnumItem );
 		}
 
 		private void DumpString( string path, Type type, object value, Action key )
 		{
-			ImGui.Indent();
-
-			if( key != null )
-			{
-				ImGui.PushStyleColor(ImGuiCol.Text, Colors.SimpleField);
-				key();
-				ImGui.PopStyleColor();
-
-				ImGui.SameLine();
-			}
-
-			if (value == null)
-			{
-				ImGui.TextColored(Colors.EqualSign, "=");
-				ImGui.SameLine();
-				ImGui.TextColored(Colors.Constant, "null");
-			}
-			else
-			{
-				ImGui.TextColored(Colors.EqualSign, "=");
-				ImGui.SameLine();
-				ImGui.TextColored(Colors.String, $"\"{value}\"" );
-			}
-
-			ImGui.Unindent();
+			DrawKeyValue( path, type, value, key, true, true, Colors.SimpleField, Colors.String );
 		}
 
 		private void DumpPrimitive( string path, Type type, object value, Action key )
 		{
-			ImGui.Indent();
-
-			if( key != null )
-			{
-				ImGui.PushStyleColor(ImGuiCol.Text, Colors.SimpleField);
-				key();
-				ImGui.PopStyleColor();
-
-				ImGui.SameLine();
-			}
-
-			ImGui.TextColored(Colors.EqualSign, "=");
-			ImGui.SameLine();
-			ImGui.TextColored(Colors.Number, $"{value}" );
-
-			ImGui.Unindent();
+			DrawKeyValue( path, type, value, key, true, false, Colors.SimpleField, Colors.Number );
 		}
 
 		public void DrawStyleSetting()
 		{
-			DrawColorPicker("Default", ref Colors.Number); ImGui.SameLine();
 			DrawColorPicker("Number", ref Colors.Number); ImGui.SameLine();
 			DrawColorPicker("Index", ref Colors.Index); ImGui.SameLine();
 			DrawColorPicker("TypeName", ref Colors.TypeName); ImGui.SameLine();

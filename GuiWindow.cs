@@ -9,6 +9,7 @@ using System.Threading;
 using System.Diagnostics.CodeAnalysis;
 using Fasterflect;
 using System.Diagnostics;
+using System.Numerics;
 
 namespace ImGuiTools
 {
@@ -31,6 +32,7 @@ namespace ImGuiTools
 		{
 			_wnd = wnd;
 
+			Init();
 		}
 
 		protected override void Dispose(bool disposing)
@@ -60,13 +62,6 @@ namespace ImGuiTools
 			}
 
 			Test1();
-
-
-
-
-
-
-
 		}
 
 
@@ -95,7 +90,60 @@ namespace ImGuiTools
 			public Action<int> SomeIntAction;
 		}
 
-		ImGuiTreeDump dumper = new ImGuiTreeDump(); // captured
+		ImGuiTreeDump dumper;
+
+		void Init()
+		{
+			dumper = new ImGuiTreeDump(); // captured
+
+			dumper.DumpersByType = new Dictionary<System.Type, ImGuiTreeDump.DumpDeleg>()
+			{
+				{ typeof(DateTime), (path, type, value, key) => {
+
+					Action valueRenderer = () => {
+						ImGui.TextColored(dumper.Colors.TypeName, $"[{type.Name}]");
+						ImGui.SameLine();
+						ImGui.TextColored(dumper.Colors.Number,$"CUSTOM {value:HH:mm:ss.fff}");
+					};
+					dumper.DrawKeyValue(path, type, valueRenderer, key, true, false, dumper.Colors.SimpleField, Vector4.Zero);
+				} },
+			};
+			
+			dumper.DumpersByPath = new Dictionary<string, ImGuiTreeDump.DumpDeleg>()
+			{
+				{ "StructArray.IntField", (path, type, value, key) =>	{
+
+					Action valueRenderer = () => {
+						ImGui.TextColored(dumper.Colors.TypeName, $"[{type.Name}]");
+						ImGui.SameLine();
+						ImGui.TextColored(dumper.Colors.Number,$"CUSTOM {value}");
+					};
+					dumper.DrawKeyValue(path, type, valueRenderer, key, true, false, dumper.Colors.SimpleField, Vector4.Zero);
+				}},
+			};
+
+			dumper.OnKeyRendered = (path, type, value) =>
+			{
+				if( ImGui.IsItemHovered() )
+				{
+					ImGui.BeginTooltip();
+					ImGui.Text($"{path} [{type.Name}]");
+					ImGui.EndTooltip();
+				}
+			};
+
+			dumper.OnValueRendered = (path, type, value) =>
+			{
+				if( ImGui.IsItemHovered() )
+				{
+					ImGui.BeginTooltip();
+					dumper.DrawValueAsText(value, false);
+					ImGui.EndTooltip();
+				}
+			};
+
+		}
+
 		void Test1()
 		{
 			var myClass = new MyClass();
@@ -110,48 +158,6 @@ namespace ImGuiTools
 			myClass.MyClass2 = new MyClass();
 
 			
-			dumper.DumpersByType = new Dictionary<System.Type, ImGuiTreeDump.DumpDeleg>()
-			{
-				{ typeof(DateTime), (path, type, value, key) => {
-					ImGui.Indent();
-					if( key != null )
-					{
-						ImGui.PushStyleColor(ImGuiCol.Text, dumper.Colors.SimpleField);
-						key();
-						ImGui.PopStyleColor();
-
-						ImGui.SameLine();
-					}
-					ImGui.TextColored(dumper.Colors.EqualSign, "=");
-					ImGui.SameLine();
-					ImGui.TextColored(dumper.Colors.TypeName, $"[{type.Name}]");
-					ImGui.SameLine();
-					ImGui.TextColored(dumper.Colors.Number,$"CUSTOM {value:HH:mm:ss.fff}");
-					ImGui.Unindent();
-				} },
-			};
-			
-			dumper.DumpersByPath = new Dictionary<string, ImGuiTreeDump.DumpDeleg>()
-			{
-				{ "StructArray.IntField", (path, type, value, key) =>	{
-					ImGui.Indent();
-					if( key != null )
-					{
-						ImGui.PushStyleColor(ImGuiCol.Text, dumper.Colors.SimpleField);
-						key();
-						ImGui.PopStyleColor();
-
-						ImGui.SameLine();
-					}
-					ImGui.TextColored(dumper.Colors.EqualSign, "=");
-					ImGui.SameLine();
-					ImGui.TextColored(dumper.Colors.TypeName, $"[{type.Name}]");
-					ImGui.SameLine();
-					ImGui.TextColored(dumper.Colors.Number,$"CUSTOM {value}");
-					ImGui.Unindent();
-				}},
-			};
-
 			dumper.DrawStyleSetting();
 
 			dumper.Dump( "", typeof(MyClass), myClass, () => ImGui.Text("MyClass") );
